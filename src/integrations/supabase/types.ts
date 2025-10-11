@@ -14,7 +14,112 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      analysis_results: {
+        Row: {
+          analysis_id: string | null
+          area: string
+          created_at: string | null
+          id: string
+          insights: string | null
+          metrics: Json
+          recommendations: string | null
+        }
+        Insert: {
+          analysis_id?: string | null
+          area: string
+          created_at?: string | null
+          id?: string
+          insights?: string | null
+          metrics?: Json
+          recommendations?: string | null
+        }
+        Update: {
+          analysis_id?: string | null
+          area?: string
+          created_at?: string | null
+          id?: string
+          insights?: string | null
+          metrics?: Json
+          recommendations?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analysis_results_analysis_id_fkey"
+            columns: ["analysis_id"]
+            isOneToOne: false
+            referencedRelation: "business_analysis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      business_analysis: {
+        Row: {
+          analysis_date: string | null
+          company_name: string
+          created_at: string | null
+          id: string
+          status: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          analysis_date?: string | null
+          company_name: string
+          created_at?: string | null
+          id?: string
+          status?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          analysis_date?: string | null
+          company_name?: string
+          created_at?: string | null
+          id?: string
+          status?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      uploaded_files: {
+        Row: {
+          analysis_id: string | null
+          file_name: string
+          file_path: string
+          file_size: number | null
+          file_type: string
+          id: string
+          uploaded_at: string | null
+        }
+        Insert: {
+          analysis_id?: string | null
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          file_type: string
+          id?: string
+          uploaded_at?: string | null
+        }
+        Update: {
+          analysis_id?: string | null
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          file_type?: string
+          id?: string
+          uploaded_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "uploaded_files_analysis_id_fkey"
+            columns: ["analysis_id"]
+            isOneToOne: false
+            referencedRelation: "business_analysis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

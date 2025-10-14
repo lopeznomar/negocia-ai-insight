@@ -1,56 +1,111 @@
 import { useState } from "react";
 import { FileUploadZone } from "@/components/FileUploadZone";
 import { AnalyticsCard } from "@/components/AnalyticsCard";
+import { AnalysisResults } from "@/components/AnalysisResults";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 import { Brain, Sparkles, BarChart3 } from "lucide-react";
-import { toast } from "sonner";
 
-type AnalysisArea = "sales" | "purchases" | "inventory" | "receivables" | "payables";
+type AnalysisArea = "ventas" | "compras" | "inventarios" | "cuentas_cobrar" | "cuentas_pagar";
 
 const Index = () => {
+  const [companyName, setCompanyName] = useState("");
   const [uploadedFiles, setUploadedFiles] = useState<Record<AnalysisArea, File | null>>({
-    sales: null,
-    purchases: null,
-    inventory: null,
-    receivables: null,
-    payables: null,
+    ventas: null,
+    compras: null,
+    inventarios: null,
+    cuentas_cobrar: null,
+    cuentas_pagar: null,
   });
+  const [analysisResults, setAnalysisResults] = useState<any[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [hasAnalyzed, setHasAnalyzed] = useState(false);
+  const { toast } = useToast();
 
   const handleFileUpload = (area: AnalysisArea, file: File) => {
     setUploadedFiles(prev => ({ ...prev, [area]: file }));
-    toast.success(`Archivo "${file.name}" cargado para ${getAreaLabel(area)}`);
+    toast({
+      title: "Archivo cargado",
+      description: `${file.name} listo para analizar`,
+    });
   };
 
-  const handleAnalyze = () => {
-    const uploadedCount = Object.values(uploadedFiles).filter(f => f !== null).length;
+  const readFileAsText = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target?.result as string);
+      reader.onerror = reject;
+      reader.readAsText(file);
+    });
+  };
+
+  const handleAnalyze = async () => {
+    const filesToAnalyze = Object.entries(uploadedFiles).filter(([_, file]) => file !== null);
     
-    if (uploadedCount === 0) {
-      toast.error("Por favor sube al menos un archivo para analizar");
+    if (filesToAnalyze.length === 0) {
+      toast({
+        title: "No hay archivos",
+        description: "Por favor sube al menos un archivo para analizar",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!companyName.trim()) {
+      toast({
+        title: "Nombre requerido",
+        description: "Por favor ingresa el nombre de tu empresa",
+        variant: "destructive",
+      });
       return;
     }
 
     setIsAnalyzing(true);
-    toast.loading("Analizando datos con IA...", { duration: 2000 });
+    const results = [];
 
-    // Simular análisis
-    setTimeout(() => {
+    try {
+      for (const [fileType, file] of filesToAnalyze) {
+        if (!file) continue;
+        
+        const csvData = await readFileAsText(file);
+
+        const { data, error } = await supabase.functions.invoke('analyze-business-data', {
+          body: {
+            csvData,
+            fileType,
+            companyName
+          }
+        });
+
+        if (error) throw error;
+
+        if (data?.success) {
+          results.push({
+            area: data.area,
+            analysis: data.analysis,
+            metrics: data.metrics
+          });
+        }
+      }
+
+      setAnalysisResults(results);
+      
+      toast({
+        title: "Análisis completado",
+        description: `Se analizaron ${results.length} áreas de tu negocio`,
+      });
+
+    } catch (error) {
+      console.error('Error al analizar:', error);
+      toast({
+        title: "Error en el análisis",
+        description: "No se pudo completar el análisis. Intenta de nuevo.",
+        variant: "destructive",
+      });
+    } finally {
       setIsAnalyzing(false);
-      setHasAnalyzed(true);
-      toast.success(`¡Análisis completado! ${uploadedCount} áreas procesadas`);
-    }, 2500);
-  };
-
-  const getAreaLabel = (area: AnalysisArea): string => {
-    const labels: Record<AnalysisArea, string> = {
-      sales: "Ventas",
-      purchases: "Compras",
-      inventory: "Inventarios",
-      receivables: "Cuentas por Cobrar",
-      payables: "Cuentas por Pagar",
-    };
-    return labels[area];
+    }
   };
 
   return (
@@ -88,35 +143,47 @@ const Index = () => {
             </p>
           </div>
 
+          {/* Company Name Input */}
+          <div className="max-w-md mx-auto mb-8">
+            <Input
+              type="text"
+              placeholder="Nombre de tu empresa"
+              value={companyName}
+              onChange={(e) => setCompanyName(e.target.value)}
+              className="text-center text-lg"
+              disabled={isAnalyzing}
+            />
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
             <FileUploadZone
               icon="📊"
               title="Ventas"
-              onFileUpload={(file) => handleFileUpload("sales", file)}
+              onFileUpload={(file) => handleFileUpload("ventas", file)}
               disabled={isAnalyzing}
             />
             <FileUploadZone
               icon="🛒"
               title="Compras"
-              onFileUpload={(file) => handleFileUpload("purchases", file)}
+              onFileUpload={(file) => handleFileUpload("compras", file)}
               disabled={isAnalyzing}
             />
             <FileUploadZone
               icon="📦"
               title="Inventarios"
-              onFileUpload={(file) => handleFileUpload("inventory", file)}
+              onFileUpload={(file) => handleFileUpload("inventarios", file)}
               disabled={isAnalyzing}
             />
             <FileUploadZone
               icon="💰"
               title="Cuentas por Cobrar"
-              onFileUpload={(file) => handleFileUpload("receivables", file)}
+              onFileUpload={(file) => handleFileUpload("cuentas_cobrar", file)}
               disabled={isAnalyzing}
             />
             <FileUploadZone
               icon="📋"
               title="Cuentas por Pagar"
-              onFileUpload={(file) => handleFileUpload("payables", file)}
+              onFileUpload={(file) => handleFileUpload("cuentas_pagar", file)}
               disabled={isAnalyzing}
             />
           </div>
@@ -129,117 +196,111 @@ const Index = () => {
               disabled={isAnalyzing}
             >
               <BarChart3 className="mr-2 h-5 w-5" />
-              {isAnalyzing ? "Analizando..." : "Analizar Negocio"}
+              {isAnalyzing ? "Analizando con IA..." : "Analizar Negocio"}
             </Button>
           </div>
         </section>
 
-        {/* Sección de análisis */}
-        <section>
-          <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold mb-2">Análisis por Área</h2>
-            <p className="text-muted-foreground">
-              Métricas clave y recomendaciones personalizadas
-            </p>
-          </div>
+        {/* Sección de resultados */}
+        {analysisResults.length > 0 && (
+          <section className="mb-12">
+            <AnalysisResults results={analysisResults} />
+          </section>
+        )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <AnalyticsCard
-              title="Ventas"
-              icon="📊"
-              description="Análisis de tendencias y productos"
-              isLoading={isAnalyzing}
-              hasData={hasAnalyzed && uploadedFiles.sales !== null}
-              metrics={[
-                { label: "Ingresos Mensuales", value: "$125,430", trend: "up", trendValue: "+15%" },
-                { label: "Top Producto", value: "Producto A", trend: "up", trendValue: "28%" },
-                { label: "Ticket Promedio", value: "$2,450", trend: "up", trendValue: "+8%" },
-                { label: "Conversión", value: "12.5%", trend: "neutral", trendValue: "0%" },
-              ]}
-              recommendations={[
-                "Incrementar inventario del Producto A por alta demanda",
-                "Implementar promoción en temporada baja (Marzo-Mayo)",
-                "Optimizar estrategia de precios en productos de baja rotación"
-              ]}
-            />
+        {/* Sección de tarjetas de análisis (demo) */}
+        {analysisResults.length === 0 && (
+          <section>
+            <div className="text-center mb-8">
+              <h2 className="text-3xl font-bold mb-2">Vista Previa de Análisis</h2>
+              <p className="text-muted-foreground">
+                Ejemplo de métricas que obtendrás al cargar tus datos
+              </p>
+            </div>
 
-            <AnalyticsCard
-              title="Compras"
-              icon="🛒"
-              description="Eficiencia y análisis de proveedores"
-              isLoading={isAnalyzing}
-              hasData={hasAnalyzed && uploadedFiles.purchases !== null}
-              metrics={[
-                { label: "Gasto Mensual", value: "$87,200", trend: "down", trendValue: "-5%" },
-                { label: "Proveedores Activos", value: "12", trend: "neutral", trendValue: "0%" },
-                { label: "Ahorro Potencial", value: "$4,300", trend: "up", trendValue: "5%" },
-                { label: "Tiempo Entrega", value: "8 días", trend: "down", trendValue: "-2d" },
-              ]}
-              recommendations={[
-                "Negociar descuentos por volumen con Proveedor B",
-                "Reducir proveedores de bajo volumen para mejores términos",
-                "Evaluar proveedores alternativos para materias primas clave"
-              ]}
-            />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <AnalyticsCard
+                title="Ventas"
+                icon="📊"
+                description="Análisis de tendencias y productos"
+                isLoading={false}
+                hasData={false}
+                metrics={[
+                  { label: "Ingresos Mensuales", value: "$125,430", trend: "up", trendValue: "+15%" },
+                  { label: "Top Producto", value: "Producto A", trend: "up", trendValue: "28%" },
+                ]}
+                recommendations={[
+                  "Incrementar inventario del Producto A por alta demanda",
+                  "Implementar promoción en temporada baja",
+                ]}
+              />
 
-            <AnalyticsCard
-              title="Inventarios"
-              icon="📦"
-              description="Rotación y optimización de stock"
-              isLoading={isAnalyzing}
-              hasData={hasAnalyzed && uploadedFiles.inventory !== null}
-              metrics={[
-                { label: "Valor Inventario", value: "$234,500", trend: "up", trendValue: "+12%" },
-                { label: "Rotación Promedio", value: "45 días", trend: "down", trendValue: "-5d" },
-                { label: "Stock Crítico", value: "3 items", trend: "neutral", trendValue: "0" },
-                { label: "Obsolescencia", value: "2.3%", trend: "down", trendValue: "-0.5%" },
-              ]}
-              recommendations={[
-                "Reducir stock de Producto C por baja rotación (90+ días)",
-                "Implementar sistema Just-in-Time para productos de alta demanda",
-                "Revisar niveles mínimos de seguridad para evitar quiebres"
-              ]}
-            />
+              <AnalyticsCard
+                title="Compras"
+                icon="🛒"
+                description="Eficiencia y análisis de proveedores"
+                isLoading={false}
+                hasData={false}
+                metrics={[
+                  { label: "Gasto Mensual", value: "$87,200", trend: "down", trendValue: "-5%" },
+                  { label: "Ahorro Potencial", value: "$4,300", trend: "up", trendValue: "5%" },
+                ]}
+                recommendations={[
+                  "Negociar descuentos por volumen",
+                  "Evaluar proveedores alternativos",
+                ]}
+              />
 
-            <AnalyticsCard
-              title="Cuentas por Cobrar"
-              icon="💰"
-              description="Gestión de cobranza y cartera"
-              isLoading={isAnalyzing}
-              hasData={hasAnalyzed && uploadedFiles.receivables !== null}
-              metrics={[
-                { label: "Cartera Total", value: "$156,800", trend: "up", trendValue: "+8%" },
-                { label: "Días Promedio", value: "42 días", trend: "down", trendValue: "-3d" },
-                { label: "Cartera Vencida", value: "$12,400", trend: "down", trendValue: "-15%" },
-                { label: "Eficiencia", value: "92%", trend: "up", trendValue: "+3%" },
-              ]}
-              recommendations={[
-                "Implementar descuentos por pronto pago (2% en 10 días)",
-                "Contactar 5 clientes con mora mayor a 60 días",
-                "Automatizar recordatorios de pago por email/SMS"
-              ]}
-            />
+              <AnalyticsCard
+                title="Inventarios"
+                icon="📦"
+                description="Rotación y optimización de stock"
+                isLoading={false}
+                hasData={false}
+                metrics={[
+                  { label: "Valor Inventario", value: "$234,500", trend: "up", trendValue: "+12%" },
+                  { label: "Rotación Promedio", value: "45 días", trend: "down", trendValue: "-5d" },
+                ]}
+                recommendations={[
+                  "Reducir stock de productos de baja rotación",
+                  "Implementar sistema Just-in-Time",
+                ]}
+              />
 
-            <AnalyticsCard
-              title="Cuentas por Pagar"
-              icon="📋"
-              description="Flujo de caja y obligaciones"
-              isLoading={isAnalyzing}
-              hasData={hasAnalyzed && uploadedFiles.payables !== null}
-              metrics={[
-                { label: "Obligaciones", value: "$98,600", trend: "down", trendValue: "-10%" },
-                { label: "Días Promedio", value: "38 días", trend: "up", trendValue: "+2d" },
-                { label: "Vencen 7 días", value: "$15,200", trend: "neutral", trendValue: "0%" },
-                { label: "Cashflow Score", value: "A-", trend: "up", trendValue: "+1" },
-              ]}
-              recommendations={[
-                "Aprovechar términos de pago extendidos con 3 proveedores",
-                "Priorizar pagos con descuentos por pronto pago",
-                "Planificar flujo para cubrir vencimientos de próximos 30 días"
-              ]}
-            />
-          </div>
-        </section>
+              <AnalyticsCard
+                title="Cuentas por Cobrar"
+                icon="💰"
+                description="Gestión de cobranza y cartera"
+                isLoading={false}
+                hasData={false}
+                metrics={[
+                  { label: "Cartera Total", value: "$156,800", trend: "up", trendValue: "+8%" },
+                  { label: "Días Promedio", value: "42 días", trend: "down", trendValue: "-3d" },
+                ]}
+                recommendations={[
+                  "Implementar descuentos por pronto pago",
+                  "Automatizar recordatorios de pago",
+                ]}
+              />
+
+              <AnalyticsCard
+                title="Cuentas por Pagar"
+                icon="📋"
+                description="Flujo de caja y obligaciones"
+                isLoading={false}
+                hasData={false}
+                metrics={[
+                  { label: "Obligaciones", value: "$98,600", trend: "down", trendValue: "-10%" },
+                  { label: "Vencen 7 días", value: "$15,200", trend: "neutral", trendValue: "0%" },
+                ]}
+                recommendations={[
+                  "Aprovechar términos de pago extendidos",
+                  "Planificar flujo para próximos vencimientos",
+                ]}
+              />
+            </div>
+          </section>
+        )}
       </main>
 
       {/* Footer */}
@@ -254,7 +315,7 @@ const Index = () => {
   );
 };
 
-// Badge component inline para evitar importación extra
+// Badge component inline
 const Badge = ({ children, variant = "default", className = "" }: { 
   children: React.ReactNode; 
   variant?: "default" | "outline";

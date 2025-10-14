@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Brain, Sparkles, BarChart3, LogOut } from "lucide-react";
+import * as XLSX from 'xlsx';
 
 type AnalysisArea = "ventas" | "compras" | "inventarios" | "cuentas_cobrar" | "cuentas_pagar";
 
@@ -68,12 +69,43 @@ const Index = () => {
     });
   };
 
-  const readFileAsText = (file: File): Promise<string> => {
+  const processFile = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = (e) => resolve(e.target?.result as string);
+      const fileExtension = file.name.split('.').pop()?.toLowerCase();
+
       reader.onerror = reject;
-      reader.readAsText(file);
+
+      // Handle Excel files (.xlsx, .xls)
+      if (fileExtension === 'xlsx' || fileExtension === 'xls') {
+        reader.onload = (e) => {
+          try {
+            const data = new Uint8Array(e.target?.result as ArrayBuffer);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            // Convert to CSV format
+            const csv = XLSX.utils.sheet_to_csv(worksheet);
+            resolve(csv);
+          } catch (error) {
+            reject(new Error('Error al procesar archivo Excel'));
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      } 
+      // Handle CSV files
+      else if (fileExtension === 'csv') {
+        reader.onload = (e) => {
+          const text = e.target?.result as string;
+          // Ensure proper line endings and trim
+          const normalizedText = text.replace(/\r\n/g, '\n').trim();
+          resolve(normalizedText);
+        };
+        reader.readAsText(file, 'UTF-8');
+      } 
+      else {
+        reject(new Error('Formato de archivo no soportado. Use CSV o Excel.'));
+      }
     });
   };
 
@@ -105,23 +137,49 @@ const Index = () => {
       for (const [fileType, file] of filesToAnalyze) {
         if (!file) continue;
         
-        const csvData = await readFileAsText(file);
+        try {
+          const csvData = await processFile(file);
 
-        const { data, error } = await supabase.functions.invoke('analyze-business-data', {
-          body: {
-            csvData,
-            fileType,
-            companyName
+          if (!csvData || csvData.trim().length === 0) {
+            toast({
+              title: "Archivo vacío",
+              description: `El archivo ${file.name} está vacío o no tiene datos válidos`,
+              variant: "destructive",
+            });
+            continue;
           }
-        });
 
-        if (error) throw error;
+          const { data, error } = await supabase.functions.invoke('analyze-business-data', {
+            body: {
+              csvData,
+              fileType,
+              companyName
+            }
+          });
 
-        if (data?.success) {
-          results.push({
-            area: data.area,
-            analysis: data.analysis,
-            metrics: data.metrics
+          if (error) {
+            console.error(`Error al analizar ${fileType}:`, error);
+            toast({
+              title: "Error en análisis",
+              description: `No se pudo analizar ${fileType}: ${error.message}`,
+              variant: "destructive",
+            });
+            continue;
+          }
+
+          if (data?.success) {
+            results.push({
+              area: data.area,
+              analysis: data.analysis,
+              metrics: data.metrics
+            });
+          }
+        } catch (fileError) {
+          console.error(`Error procesando archivo ${file.name}:`, fileError);
+          toast({
+            title: "Error de archivo",
+            description: `No se pudo procesar ${file.name}. Verifica el formato.`,
+            variant: "destructive",
           });
         }
       }

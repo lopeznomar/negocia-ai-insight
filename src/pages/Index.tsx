@@ -1,16 +1,19 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { FileUploadZone } from "@/components/FileUploadZone";
 import { AnalyticsCard } from "@/components/AnalyticsCard";
 import { AnalysisResults } from "@/components/AnalysisResults";
+import { Auth } from "@/components/Auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Brain, Sparkles, BarChart3 } from "lucide-react";
+import { Brain, Sparkles, BarChart3, LogOut } from "lucide-react";
 
 type AnalysisArea = "ventas" | "compras" | "inventarios" | "cuentas_cobrar" | "cuentas_pagar";
 
 const Index = () => {
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [companyName, setCompanyName] = useState("");
   const [uploadedFiles, setUploadedFiles] = useState<Record<AnalysisArea, File | null>>({
     ventas: null,
@@ -22,6 +25,40 @@ const Index = () => {
   const [analysisResults, setAnalysisResults] = useState<any[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const { toast } = useToast();
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen gradient-bg flex items-center justify-center">
+        <div className="text-center">
+          <Brain className="h-12 w-12 mx-auto mb-4 text-primary animate-pulse" />
+          <p className="text-muted-foreground">Cargando...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Auth />;
+  }
 
   const handleFileUpload = (area: AnalysisArea, file: File) => {
     setUploadedFiles(prev => ({ ...prev, [area]: file }));
@@ -128,6 +165,15 @@ const Index = () => {
                 <Sparkles className="h-3 w-3 mr-1" />
                 Con IA
               </Badge>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSignOut}
+                className="gap-2"
+              >
+                <LogOut className="h-4 w-4" />
+                Salir
+              </Button>
             </div>
           </div>
         </div>

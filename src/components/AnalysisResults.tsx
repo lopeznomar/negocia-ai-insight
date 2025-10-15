@@ -67,7 +67,9 @@ export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {results.map((result, index) => {
-          const config = areaConfig[result.area as keyof typeof areaConfig];
+          // ✅ FALLBACK SEGURO - Si no encuentra el área, usa 'ventas'
+          const areaKey = result.area as keyof typeof areaConfig;
+          const config = areaConfig[areaKey] || areaConfig.ventas;
           const Icon = config.icon;
 
           return (
